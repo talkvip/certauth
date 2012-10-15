@@ -1,1 +1,6 @@
 A Simple Certificate Authority Library
+
+The library crates a 4096 bit Public RSA Keyed CA self signed certificate.
+The library can sign or generate TLS Server certificates
+
+The binaries can be found at the maven repository http://maven2.sanaldiyar.com/repo
