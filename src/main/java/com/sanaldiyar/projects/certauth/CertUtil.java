@@ -16,6 +16,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.TimeZone;
 import java.util.Vector;
+import sun.security.pkcs.PKCS10;
 import sun.security.util.ObjectIdentifier;
 import sun.security.x509.AlgorithmId;
 import sun.security.x509.CertificateAlgorithmId;
@@ -89,6 +90,11 @@ public class CertUtil {
             throw new Exception("Error at cert info creation", ex);
         }
     }
+    
+     public static X509CertInfo createCertInfo(PKCS10 request, 
+            X500Name issuer, int validForYears) throws Exception{
+         return createCertInfo(request.getSubjectName(), issuer, validForYears, request.getSubjectPublicKeyInfo());
+     }
 
     public static Certificate createAndSignCertificate(X509CertInfo certInfo, 
             PrivateKey privateKey, long serial) throws Exception {

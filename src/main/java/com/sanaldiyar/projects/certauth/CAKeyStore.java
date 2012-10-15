@@ -8,15 +8,21 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
-import java.math.BigInteger;
 import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import javax.crypto.spec.SecretKeySpec;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import sun.security.x509.BasicConstraintsExtension;
 import sun.security.x509.CertificateExtensions;
 import sun.security.x509.X500Name;
@@ -35,19 +41,37 @@ public class CAKeyStore {
     private final static String KEY_STORE_PATH = "keystore.path";
     private final static String KEY_STORE_PASSWORD = "keystore.password";
     private final static String NEXT_SERIAL = "next_serial";
-    private String password;
+    private final static String DEFAULT_KEYSTORE_PASSWORD = "123456";
+    private final static String DEFAULT_KEYSTORE_PATH = "key.store";
     private File path;
     private KeyStore keyStore;
-    private long next_serial = 1;
 
     public CAKeyStore(String path) {
         this.path = new File(path);
     }
 
     public synchronized long getNextSerial() {
-        long val = next_serial;
-        next_serial++;
-        return val;
+        try {
+            long val = Long.valueOf(getPropertyValue(NEXT_SERIAL));
+            setPropertyValue(NEXT_SERIAL, Long.toString(val++));
+            return val;
+        } catch (Exception ex) {
+            Logger.getLogger(CAKeyStore.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return -1;
+    }
+    
+    private String getPropertyValue(String prop) throws Exception{
+        Properties properties = new Properties();
+        properties.load(new FileInputStream(path));
+        return properties.getProperty(prop);
+    }
+    
+    private void setPropertyValue(String prop,String value) throws Exception{
+        Properties properties = new Properties();
+        properties.load(new FileInputStream(path));
+        properties.setProperty(prop, value);
+        properties.store(new FileOutputStream(path), "");
     }
 
     public boolean isLoaded() {
@@ -59,34 +83,64 @@ public class CAKeyStore {
         Properties properties = new Properties();
         if (path.exists()) {
             properties.load(new FileInputStream(path));
-            password = properties.getProperty(KEY_STORE_PASSWORD);
+            String password = properties.getProperty(KEY_STORE_PASSWORD);
             try {
-                next_serial = Long.valueOf(properties.getProperty(NEXT_SERIAL));
                 keyStore.load(new FileInputStream(properties.getProperty(KEY_STORE_PATH)), password.toCharArray());
             } catch (Exception ex) {
                 keyStore = null;
                 throw new Exception("Error while loading key store", ex);
             }
         } else {
-            properties.setProperty(KEY_STORE_PATH, "key.store");
-            password="123456";
-            properties.setProperty(KEY_STORE_PASSWORD, password);
-            next_serial=1;
-            properties.setProperty(NEXT_SERIAL, Long.toString(next_serial));
+            properties.setProperty(KEY_STORE_PATH, DEFAULT_KEYSTORE_PATH);
+            properties.setProperty(KEY_STORE_PASSWORD, DEFAULT_KEYSTORE_PASSWORD);
+            properties.setProperty(NEXT_SERIAL, Long.toString(1));
             properties.store(new PrintWriter(path), "");
             keyStore.load(null, null);
-            keyStore.store(new FileOutputStream("key.store"), password.toCharArray());
+            keyStore.store(new FileOutputStream(DEFAULT_KEYSTORE_PATH), DEFAULT_KEYSTORE_PASSWORD.toCharArray());
             load();
+        }
+    }
+
+    public void changePassword(String newPasswd) throws Exception {
+        if (!isLoaded()) {
+            throw new Exception("Not loaded!");
+        }
+        String storePath;
+        Properties properties;
+        try {
+            KeyStore nkeyStore = KeyStore.getInstance("JKS");
+            nkeyStore.load(null, null);
+            Map<String, String> aliases = listCertificateAliases();
+            
+            for(String alias : aliases.values()){
+                if(keyStore.isCertificateEntry(alias)){
+                    nkeyStore.setCertificateEntry(alias, keyStore.getCertificate(alias));
+                }
+            }
+
+            Key caKey = keyStore.getKey(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, getPropertyValue(KEY_STORE_PASSWORD).toCharArray());
+            nkeyStore.setKeyEntry(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, caKey, newPasswd.toCharArray(), new Certificate[]{getCACertificate()});
+            properties = new Properties();
+            properties.load(new FileInputStream(path));            
+            storePath=properties.getProperty(KEY_STORE_PATH);
+            nkeyStore.store(new FileOutputStream(storePath + ".tmp"), newPasswd.toCharArray());
+            properties.setProperty(KEY_STORE_PASSWORD, newPasswd);
+            properties.store(new PrintWriter(path.getAbsolutePath()+ ".tmp"), "");
+        } catch (Exception ex) {
+            throw new Exception("Error while changing password of store", ex);
+        }
+        File confFile=new File(path.getAbsolutePath() + ".tmp");
+        if(confFile.renameTo(path)){
+            File storeFile=new File(storePath+ ".tmp");
+            if(!storeFile.renameTo(new File(storePath))){
+                throw new Exception("Error while changing password of store");
+            }
         }
     }
 
     public void save() throws Exception {
         try {
-            Properties properties = new Properties();
-            properties.load(new FileInputStream(path));
-            properties.setProperty(NEXT_SERIAL, Long.toString(next_serial));
-            properties.store(new PrintWriter(path), "");
-            keyStore.store(new FileOutputStream(properties.getProperty(KEY_STORE_PATH)), password.toCharArray());
+            keyStore.store(new FileOutputStream(getPropertyValue(KEY_STORE_PATH)), getPropertyValue(KEY_STORE_PASSWORD).toCharArray());
         } catch (Exception ex) {
             throw new Exception("Error while saving key store", ex);
         }
@@ -104,7 +158,7 @@ public class CAKeyStore {
         if (!isLoaded()) {
             throw new Exception("Not loaded!");
         }
-        return (PrivateKey) keyStore.getKey(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, password.toCharArray());
+        return (PrivateKey) keyStore.getKey(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, getPropertyValue(KEY_STORE_PASSWORD).toCharArray());
     }
 
     public Certificate getCACertificate() throws Exception {
@@ -144,7 +198,7 @@ public class CAKeyStore {
             Certificate cert = CertUtil.createAndSignCertificate(caCertInfo,
                     caKeyPair.getPrivate(), getNextSerial());
 
-            keyStore.setKeyEntry(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, caKeyPair.getPrivate(), password.toCharArray(),
+            keyStore.setKeyEntry(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, caKeyPair.getPrivate(), getPropertyValue(KEY_STORE_PASSWORD).toCharArray(),
                     new Certificate[]{cert});
 
         } catch (Exception ex) {
@@ -158,5 +212,60 @@ public class CAKeyStore {
         } catch (Exception ex) {
             throw new Exception("Error adding cert to store", ex);
         }
+    }
+
+    public boolean containsCertificate(String dn) throws Exception {
+        return listCertificates().contains(dn);
+    }
+
+    public List<String> listCertificates() throws Exception {
+        if (!isLoaded()) {
+            throw new Exception("Not loaded!");
+        }
+        try {
+            List<String> list = new LinkedList<String>();
+            Enumeration<String> aliases = keyStore.aliases();
+            for (; aliases.hasMoreElements();) {
+                String alias = aliases.nextElement();
+                X509Certificate certificate = (X509Certificate) keyStore.getCertificate(alias);
+                list.add(certificate.getSubjectDN().getName());
+            }
+            return list;
+        } catch (Exception ex) {
+            throw new Exception("Error while listing certificate dns", ex);
+        }
+    }
+
+    private Map<String, String> listCertificateAliases() throws Exception {
+        if (!isLoaded()) {
+            throw new Exception("Not loaded!");
+        }
+        try {
+            Map<String, String> map = new HashMap<String, String>();
+            Enumeration<String> aliases = keyStore.aliases();
+            for (; aliases.hasMoreElements();) {
+                String alias = aliases.nextElement();
+                X509Certificate certificate = (X509Certificate) keyStore.getCertificate(alias);
+                map.put(certificate.getSubjectDN().getName(), alias);
+            }
+            return map;
+        } catch (Exception ex) {
+            throw new Exception("Error while listing certificate dns", ex);
+        }
+    }
+
+    public Certificate getCertificate(String dn) throws Exception {
+        if (!isLoaded()) {
+            throw new Exception("Not loaded!");
+        }
+        try {
+            Map<String, String> certs = listCertificateAliases();
+            if (certs.containsKey(dn)) {
+                return keyStore.getCertificate(certs.get(dn));
+            }
+        } catch (Exception ex) {
+            throw new Exception("Error at returning certificate", ex);
+        }
+        return null;
     }
 }
