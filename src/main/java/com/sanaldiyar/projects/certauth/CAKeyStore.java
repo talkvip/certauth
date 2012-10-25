@@ -196,7 +196,7 @@ public class CAKeyStore {
             caCertInfo.set(CertificateExtensions.NAME, extensions);
 
             Certificate cert = CertUtil.createAndSignCertificate(caCertInfo,
-                    caKeyPair.getPrivate(), getNextSerial());
+                    caKeyPair, getNextSerial());
 
             keyStore.setKeyEntry(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, caKeyPair.getPrivate(), getPropertyValue(KEY_STORE_PASSWORD).toCharArray(),
                     new Certificate[]{cert});
@@ -267,5 +267,10 @@ public class CAKeyStore {
             throw new Exception("Error at returning certificate", ex);
         }
         return null;
+    }
+    
+    public KeyPair getCAKeyPair() throws Exception{
+        KeyPair keyPair=new KeyPair(getCACertificate().getPublicKey(), getCAPrivateKey());
+        return keyPair;
     }
 }
