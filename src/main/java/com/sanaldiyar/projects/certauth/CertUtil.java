@@ -18,8 +18,12 @@ import java.util.List;
 import java.util.TimeZone;
 import java.util.Vector;
 import sun.security.pkcs.PKCS10;
+import sun.security.util.DerOutputStream;
+import sun.security.util.DerValue;
 import sun.security.util.ObjectIdentifier;
+import sun.security.x509.AccessDescription;
 import sun.security.x509.AlgorithmId;
+import sun.security.x509.AuthorityInfoAccessExtension;
 import sun.security.x509.AuthorityKeyIdentifierExtension;
 import sun.security.x509.BasicConstraintsExtension;
 import sun.security.x509.CRLDistributionPointsExtension;
@@ -119,43 +123,45 @@ public class CertUtil {
                 certInfo.set(CertificateExtensions.NAME, extensions);
             }
 
-            
-            BasicConstraintsExtension ca=null;
-            try{
-                ca=(BasicConstraintsExtension) extensions.get("ca");
-            } catch (Exception nex) {}
+
+            BasicConstraintsExtension ca = null;
+            try {
+                ca = (BasicConstraintsExtension) extensions.get("ca");
+            } catch (Exception nex) {
+            }
             if (ca == null) {
                 ca = new BasicConstraintsExtension(Boolean.TRUE, Boolean.FALSE, 0);
                 extensions.set("ca", ca);
             }
-            
-            ExtendedKeyUsageExtension keyUsageExtension=null;
-            try{
-                keyUsageExtension =(ExtendedKeyUsageExtension)extensions.get("keyextusage");
-            } catch (Exception nex){}
-            
+
+            ExtendedKeyUsageExtension keyUsageExtension = null;
+            try {
+                keyUsageExtension = (ExtendedKeyUsageExtension) extensions.get("keyextusage");
+            } catch (Exception nex) {
+            }
+
 
             if (keyUsageExtension == null) {
                 Vector<ObjectIdentifier> objectIdentifiers = new Vector<ObjectIdentifier>();
                 objectIdentifiers.add(usage);
-                keyUsageExtension = new ExtendedKeyUsageExtension(Boolean.TRUE, objectIdentifiers); 
+                keyUsageExtension = new ExtendedKeyUsageExtension(Boolean.TRUE, objectIdentifiers);
                 extensions.set("keyextusage", keyUsageExtension);
             } else {
                 Vector<ObjectIdentifier> objectIdentifiers = new Vector<ObjectIdentifier>();
                 objectIdentifiers.add(usage);
-                
-                for(String susage : keyUsageExtension.getExtendedKeyUsage()){
+
+                for (String susage : keyUsageExtension.getExtendedKeyUsage()) {
                     String[] values = susage.split("\\.");
-                    int[] nvalues=new int[values.length];
-                    for(int i=0;i<nvalues.length;i++){
-                        nvalues[i]=Integer.parseInt(values[i]);
+                    int[] nvalues = new int[values.length];
+                    for (int i = 0; i < nvalues.length; i++) {
+                        nvalues[i] = Integer.parseInt(values[i]);
                     }
                     ObjectIdentifier uoid = ObjectIdentifier.newInternal(nvalues);
                     objectIdentifiers.add(uoid);
                 }
-                
-                
-                keyUsageExtension = new ExtendedKeyUsageExtension(Boolean.TRUE, objectIdentifiers); 
+
+
+                keyUsageExtension = new ExtendedKeyUsageExtension(Boolean.TRUE, objectIdentifiers);
                 extensions.delete("keyextusage");
                 extensions.set("keyextusage", keyUsageExtension);
             }
@@ -185,6 +191,34 @@ public class CertUtil {
 
         } catch (Exception ex) {
             throw new Exception("Error at setting CRL", ex);
+        }
+    }
+
+    public static void setAIAInformation(X509CertInfo certInfo, String url) throws Exception {
+        try {
+            CertificateExtensions extensions = (CertificateExtensions) certInfo.get(CertificateExtensions.NAME);
+            if (extensions == null) {
+                extensions = new CertificateExtensions();
+                certInfo.set(CertificateExtensions.NAME, extensions);
+            }
+            GeneralName gn = new GeneralName(new URIName(url));
+            
+            List<AccessDescription> ads=new ArrayList<AccessDescription>();
+            
+            DerOutputStream tdos=new DerOutputStream();
+            tdos.putOID(AccessDescription.Ad_CAISSUERS_Id);
+            gn.encode(tdos);
+            DerOutputStream dos=new DerOutputStream();
+            dos.write(DerValue.tag_Sequence, tdos);
+            
+            AccessDescription ad=new AccessDescription(new DerValue(dos.toByteArray()));
+            
+            ads.add(ad);
+
+            AuthorityInfoAccessExtension aiae = new AuthorityInfoAccessExtension(ads);
+            extensions.set("aia", aiae);
+        } catch (Exception ex) {
+            throw new Exception("Error at setting AIA", ex);
         }
     }
 
