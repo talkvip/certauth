@@ -54,7 +54,7 @@ public class CertUtil {
         SUBJECT, AUTHORITY;
     }
 
-    public static void setKeyIdentifier(X509CertInfo certInfo, PublicKey publicKey, KeyIdentifierType ki) throws Exception {
+    static void setKeyIdentifier(X509CertInfo certInfo, PublicKey publicKey, KeyIdentifierType ki) throws Exception {
 
         CertificateExtensions extensions = (CertificateExtensions) certInfo.get(CertificateExtensions.NAME);
         if (extensions == null) {
@@ -121,7 +121,7 @@ public class CertUtil {
     public static X509CertInfo createCertInfo(X500Name subject,
             X500Name issuer, int validForYears, PublicKey publicKey) throws Exception {
         try {
-            Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("Europe/Istanbul"));
+            Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
             Date from = calendar.getTime();
             calendar.add(Calendar.YEAR, validForYears);
             Date to = calendar.getTime();

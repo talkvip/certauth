@@ -26,7 +26,7 @@ public class KeyUtil {
         return rsakpg.generateKeyPair();
     }
     
-    public static byte[] calculateKeyIdentifier(PublicKey publicKey) throws Exception{
+    static byte[] calculateKeyIdentifier(PublicKey publicKey) throws Exception{
         DerValue dv=new DerValue(publicKey.getEncoded());
             if(dv.tag!=DerValue.tag_Sequence){
                 throw new Exception("Error at calculate key identifier: key is incorrect");

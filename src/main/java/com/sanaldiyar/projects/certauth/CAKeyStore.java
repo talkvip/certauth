@@ -11,9 +11,9 @@ import java.io.PrintWriter;
 import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyStore;
-import java.security.KeyStoreException;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
+import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -40,9 +40,11 @@ public class CAKeyStore {
     public final static int CA_RSA_KEY_BIT_LENGTH = 4096;
     private final static String KEY_STORE_PATH = "keystore.path";
     private final static String KEY_STORE_PASSWORD = "keystore.password";
+    private final static String CRL_STORE_PATH = "crlstore.path";
     private final static String NEXT_SERIAL = "next_serial";
     private final static String DEFAULT_KEYSTORE_PASSWORD = "123456";
     private final static String DEFAULT_KEYSTORE_PATH = "key.store";
+    private final static String DEFAULT_CRLSTORE_PATH = "crl.store";
     private File path;
     private KeyStore keyStore;
 
@@ -53,7 +55,7 @@ public class CAKeyStore {
     public synchronized long getNextSerial() {
         try {
             long val = Long.valueOf(getPropertyValue(NEXT_SERIAL));
-            setPropertyValue(NEXT_SERIAL, Long.toString(val++));
+            setPropertyValue(NEXT_SERIAL, Long.toString(++val));
             return val;
         } catch (Exception ex) {
             Logger.getLogger(CAKeyStore.class.getName()).log(Level.SEVERE, null, ex);
@@ -125,6 +127,7 @@ public class CAKeyStore {
             storePath=properties.getProperty(KEY_STORE_PATH);
             nkeyStore.store(new FileOutputStream(storePath + ".tmp"), newPasswd.toCharArray());
             properties.setProperty(KEY_STORE_PASSWORD, newPasswd);
+            properties.setProperty(CRL_STORE_PATH, DEFAULT_CRLSTORE_PATH);
             properties.store(new PrintWriter(path.getAbsolutePath()+ ".tmp"), "");
         } catch (Exception ex) {
             throw new Exception("Error while changing password of store", ex);
@@ -272,5 +275,31 @@ public class CAKeyStore {
     public KeyPair getCAKeyPair() throws Exception{
         KeyPair keyPair=new KeyPair(getCACertificate().getPublicKey(), getCAPrivateKey());
         return keyPair;
+    }
+    
+    public void revokeCertificate(Certificate cert,int reason) throws Exception{
+        if (!isLoaded()) {
+            throw new Exception("Not loaded!");
+        }
+        try {
+            String alias="cert" + ((X509CertImpl)cert).getSerialNumber();
+            if(keyStore.containsAlias(alias)){
+                keyStore.deleteEntry(alias);
+                CRLUtil crlUtil=CRLUtil.getInstance(getPropertyValue(CRL_STORE_PATH));
+                crlUtil.addCertificate(cert, reason);
+                CRLUtil.save(crlUtil, getPropertyValue(CRL_STORE_PATH));
+            }
+        } catch (Exception ex) {
+            throw new Exception("Error while revoking certificate",ex);
+        }
+    }
+    
+    public X509CRL getCRL() throws Exception{
+        try {
+            CRLUtil crlUtil=CRLUtil.getInstance(getPropertyValue(CRL_STORE_PATH));
+            return crlUtil.generateCRL(this);
+        } catch (Exception ex) {
+            throw new Exception("Error while getting CRL",ex);
+        }
     }
 }
