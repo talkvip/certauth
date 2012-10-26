@@ -61,37 +61,107 @@ public class CertUtil {
             extensions = new CertificateExtensions();
             certInfo.set(CertificateExtensions.NAME, extensions);
         }
-        
-        Extension ex=null;
-        String alias="";
-        if(ki==KeyIdentifierType.AUTHORITY){
-            ex=new AuthorityKeyIdentifierExtension(new KeyIdentifier(publicKey), null, null);
-            alias="authority";
+
+        Extension ex = null;
+        String alias = "";
+        if (ki == KeyIdentifierType.AUTHORITY) {
+            ex = new AuthorityKeyIdentifierExtension(new KeyIdentifier(publicKey), null, null);
+            alias = "authority";
         } else {
-            ex=new SubjectKeyIdentifierExtension(KeyUtil.calculateKeyIdentifier(publicKey));
-            alias="subject";
+            ex = new SubjectKeyIdentifierExtension(KeyUtil.calculateKeyIdentifier(publicKey));
+            alias = "subject";
         }
         extensions.set(alias, ex);
     }
 
     public static void setAsServerCertificate(X509CertInfo certInfo) throws Exception {
         try {
-            Vector<ObjectIdentifier> objectIdentifiers = new Vector<ObjectIdentifier>();
             ObjectIdentifier serverOid = ObjectIdentifier.newInternal(new int[]{1, 3, 6, 1, 5, 5, 7, 3, 1});
-            objectIdentifiers.add(serverOid);
-            ExtendedKeyUsageExtension keyUsageExtension = new ExtendedKeyUsageExtension(Boolean.TRUE, objectIdentifiers);
+            setExtendedKeyUsage(certInfo, serverOid);
+        } catch (Exception ex) {
+            throw new Exception("Error at setting certificate as server certificate", ex);
+        }
+    }
 
-            BasicConstraintsExtension ca = new BasicConstraintsExtension(Boolean.TRUE, Boolean.FALSE, 0);
+    public static void setAsClientCertificate(X509CertInfo certInfo) throws Exception {
+        try {
+            ObjectIdentifier serverOid = ObjectIdentifier.newInternal(new int[]{1, 3, 6, 1, 5, 5, 7, 3, 2});
+            setExtendedKeyUsage(certInfo, serverOid);
+        } catch (Exception ex) {
+            throw new Exception("Error at setting certificate as client certificate", ex);
+        }
+    }
+
+    public static void setAsCodeSigningCertificate(X509CertInfo certInfo) throws Exception {
+        try {
+            ObjectIdentifier serverOid = ObjectIdentifier.newInternal(new int[]{1, 3, 6, 1, 5, 5, 7, 3, 3});
+            setExtendedKeyUsage(certInfo, serverOid);
+        } catch (Exception ex) {
+            throw new Exception("Error at setting certificate as code signing certificate", ex);
+        }
+    }
+
+    public static void setAsEmailCertificate(X509CertInfo certInfo) throws Exception {
+        try {
+            ObjectIdentifier serverOid = ObjectIdentifier.newInternal(new int[]{1, 3, 6, 1, 5, 5, 7, 3, 4});
+            setExtendedKeyUsage(certInfo, serverOid);
+        } catch (Exception ex) {
+            throw new Exception("Error at setting certificate as email certificate", ex);
+        }
+    }
+
+    private static void setExtendedKeyUsage(X509CertInfo certInfo, ObjectIdentifier usage) throws Exception {
+        try {
 
             CertificateExtensions extensions = (CertificateExtensions) certInfo.get(CertificateExtensions.NAME);
             if (extensions == null) {
                 extensions = new CertificateExtensions();
                 certInfo.set(CertificateExtensions.NAME, extensions);
             }
-            extensions.set("serverusage", keyUsageExtension);
-            extensions.set("ca", ca);
+
+            
+            BasicConstraintsExtension ca=null;
+            try{
+                ca=(BasicConstraintsExtension) extensions.get("ca");
+            } catch (Exception nex) {}
+            if (ca == null) {
+                ca = new BasicConstraintsExtension(Boolean.TRUE, Boolean.FALSE, 0);
+                extensions.set("ca", ca);
+            }
+            
+            ExtendedKeyUsageExtension keyUsageExtension=null;
+            try{
+                keyUsageExtension =(ExtendedKeyUsageExtension)extensions.get("keyextusage");
+            } catch (Exception nex){}
+            
+
+            if (keyUsageExtension == null) {
+                Vector<ObjectIdentifier> objectIdentifiers = new Vector<ObjectIdentifier>();
+                objectIdentifiers.add(usage);
+                keyUsageExtension = new ExtendedKeyUsageExtension(Boolean.TRUE, objectIdentifiers); 
+                extensions.set("keyextusage", keyUsageExtension);
+            } else {
+                Vector<ObjectIdentifier> objectIdentifiers = new Vector<ObjectIdentifier>();
+                objectIdentifiers.add(usage);
+                
+                for(String susage : keyUsageExtension.getExtendedKeyUsage()){
+                    String[] values = susage.split("\\.");
+                    int[] nvalues=new int[values.length];
+                    for(int i=0;i<nvalues.length;i++){
+                        nvalues[i]=Integer.parseInt(values[i]);
+                    }
+                    ObjectIdentifier uoid = ObjectIdentifier.newInternal(nvalues);
+                    objectIdentifiers.add(uoid);
+                }
+                
+                
+                keyUsageExtension = new ExtendedKeyUsageExtension(Boolean.TRUE, objectIdentifiers); 
+                extensions.delete("keyextusage");
+                extensions.set("keyextusage", keyUsageExtension);
+            }
+
         } catch (Exception ex) {
-            throw new Exception("Error at setting certificate as server certificate", ex);
+            throw new Exception("Error at setting extended key usage certificate", ex);
         }
     }
 
@@ -146,7 +216,7 @@ public class CertUtil {
             certInfo.set(X509CertInfo.SUBJECT, certificateSubjectName);
             certInfo.set(X509CertInfo.VALIDITY, certificateValidity);
             certInfo.set(X509CertInfo.VERSION, certificateVersion);
-            
+
             setKeyIdentifier(certInfo, publicKey, KeyIdentifierType.SUBJECT);
 
             return certInfo;

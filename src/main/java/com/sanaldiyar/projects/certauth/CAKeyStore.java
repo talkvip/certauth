@@ -62,14 +62,14 @@ public class CAKeyStore {
         }
         return -1;
     }
-    
-    private String getPropertyValue(String prop) throws Exception{
+
+    private String getPropertyValue(String prop) throws Exception {
         Properties properties = new Properties();
         properties.load(new FileInputStream(path));
         return properties.getProperty(prop);
     }
-    
-    private void setPropertyValue(String prop,String value) throws Exception{
+
+    private void setPropertyValue(String prop, String value) throws Exception {
         Properties properties = new Properties();
         properties.load(new FileInputStream(path));
         properties.setProperty(prop, value);
@@ -113,9 +113,9 @@ public class CAKeyStore {
             KeyStore nkeyStore = KeyStore.getInstance("JKS");
             nkeyStore.load(null, null);
             Map<String, String> aliases = listCertificateAliases();
-            
-            for(String alias : aliases.values()){
-                if(keyStore.isCertificateEntry(alias)){
+
+            for (String alias : aliases.values()) {
+                if (keyStore.isCertificateEntry(alias)) {
                     nkeyStore.setCertificateEntry(alias, keyStore.getCertificate(alias));
                 }
             }
@@ -123,19 +123,19 @@ public class CAKeyStore {
             Key caKey = keyStore.getKey(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, getPropertyValue(KEY_STORE_PASSWORD).toCharArray());
             nkeyStore.setKeyEntry(CA_PRIVATE_KEY_CERTIFICATE_ALIAS, caKey, newPasswd.toCharArray(), new Certificate[]{getCACertificate()});
             properties = new Properties();
-            properties.load(new FileInputStream(path));            
-            storePath=properties.getProperty(KEY_STORE_PATH);
+            properties.load(new FileInputStream(path));
+            storePath = properties.getProperty(KEY_STORE_PATH);
             nkeyStore.store(new FileOutputStream(storePath + ".tmp"), newPasswd.toCharArray());
             properties.setProperty(KEY_STORE_PASSWORD, newPasswd);
             properties.setProperty(CRL_STORE_PATH, DEFAULT_CRLSTORE_PATH);
-            properties.store(new PrintWriter(path.getAbsolutePath()+ ".tmp"), "");
+            properties.store(new PrintWriter(path.getAbsolutePath() + ".tmp"), "");
         } catch (Exception ex) {
             throw new Exception("Error while changing password of store", ex);
         }
-        File confFile=new File(path.getAbsolutePath() + ".tmp");
-        if(confFile.renameTo(path)){
-            File storeFile=new File(storePath+ ".tmp");
-            if(!storeFile.renameTo(new File(storePath))){
+        File confFile = new File(path.getAbsolutePath() + ".tmp");
+        if (confFile.renameTo(path)) {
+            File storeFile = new File(storePath + ".tmp");
+            if (!storeFile.renameTo(new File(storePath))) {
                 throw new Exception("Error while changing password of store");
             }
         }
@@ -192,7 +192,12 @@ public class CAKeyStore {
             X509CertInfo caCertInfo = CertUtil.createCertInfo(caName, caName,
                     CA_VALID_YEARS, caKeyPair.getPublic());
 
-            CertificateExtensions extensions = new CertificateExtensions();
+            CertificateExtensions extensions = (CertificateExtensions) caCertInfo.get(CertificateExtensions.NAME);
+            if (extensions == null) {
+                extensions = new CertificateExtensions();
+                caCertInfo.set(CertificateExtensions.NAME, extensions);
+            }
+            
             BasicConstraintsExtension ca = new BasicConstraintsExtension(Boolean.TRUE, Boolean.TRUE, -1);
             extensions.set("ca", ca);
 
@@ -271,35 +276,35 @@ public class CAKeyStore {
         }
         return null;
     }
-    
-    public KeyPair getCAKeyPair() throws Exception{
-        KeyPair keyPair=new KeyPair(getCACertificate().getPublicKey(), getCAPrivateKey());
+
+    public KeyPair getCAKeyPair() throws Exception {
+        KeyPair keyPair = new KeyPair(getCACertificate().getPublicKey(), getCAPrivateKey());
         return keyPair;
     }
-    
-    public void revokeCertificate(Certificate cert,int reason) throws Exception{
+
+    public void revokeCertificate(Certificate cert, int reason) throws Exception {
         if (!isLoaded()) {
             throw new Exception("Not loaded!");
         }
         try {
-            String alias="cert" + ((X509CertImpl)cert).getSerialNumber();
-            if(keyStore.containsAlias(alias)){
+            String alias = "cert" + ((X509CertImpl) cert).getSerialNumber();
+            if (keyStore.containsAlias(alias)) {
                 keyStore.deleteEntry(alias);
-                CRLUtil crlUtil=CRLUtil.getInstance(getPropertyValue(CRL_STORE_PATH));
+                CRLUtil crlUtil = CRLUtil.getInstance(getPropertyValue(CRL_STORE_PATH));
                 crlUtil.addCertificate(cert, reason);
                 CRLUtil.save(crlUtil, getPropertyValue(CRL_STORE_PATH));
             }
         } catch (Exception ex) {
-            throw new Exception("Error while revoking certificate",ex);
+            throw new Exception("Error while revoking certificate", ex);
         }
     }
-    
-    public X509CRL getCRL() throws Exception{
+
+    public X509CRL getCRL() throws Exception {
         try {
-            CRLUtil crlUtil=CRLUtil.getInstance(getPropertyValue(CRL_STORE_PATH));
+            CRLUtil crlUtil = CRLUtil.getInstance(getPropertyValue(CRL_STORE_PATH));
             return crlUtil.generateCRL(this);
         } catch (Exception ex) {
-            throw new Exception("Error while getting CRL",ex);
+            throw new Exception("Error while getting CRL", ex);
         }
     }
 }
