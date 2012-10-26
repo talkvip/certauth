@@ -53,7 +53,7 @@ public class CAKeyStore {
     public synchronized long getNextSerial() {
         try {
             long val = Long.valueOf(getPropertyValue(NEXT_SERIAL));
-            setPropertyValue(NEXT_SERIAL, Long.toString(val++));
+            setPropertyValue(NEXT_SERIAL, Long.toString(++val));
             return val;
         } catch (Exception ex) {
             Logger.getLogger(CAKeyStore.class.getName()).log(Level.SEVERE, null, ex);
